@@ -63,10 +63,29 @@ public class GameService {
         game = gameRepository.save(game);
         
         // 创建棋盘缓存
-        activeBoardsCache.put(game.getGameId(), new Board());
+        Board board = new Board();
+        activeBoardsCache.put(game.getGameId(), board);
         
         log.info("创建人机对战: gameId={}, playerId={}, difficulty={}, playerColor={}", 
                 game.getGameId(), playerId, difficulty, playerIsBlack ? "BLACK" : "WHITE");
+        
+        // 如果AI执黑先手，让AI先落子
+        if (!playerIsBlack) {
+            AIEngine.Position aiMove = aiEngine.calculateNextMove(board, difficulty, PieceColor.BLACK);
+            if (aiMove != null) {
+                gameLogic.executeMove(board, aiMove.getX(), aiMove.getY(), PieceColor.BLACK);
+                // 保存AI落子记录（AI执黑时playerId设为-1表示AI）
+                GameMove move = GameMove.builder()
+                        .gameId(game.getGameId())
+                        .moveNumber(board.getMoveCount())
+                        .playerId(-1L)  // AI的playerId设为-1
+                        .positionX(aiMove.getX())
+                        .positionY(aiMove.getY())
+                        .build();
+                gameMoveRepository.save(move);
+                log.info("AI先手落子: gameId={}, position=({}, {})", game.getGameId(), aiMove.getX(), aiMove.getY());
+            }
+        }
         
         return game;
     }
@@ -331,6 +350,38 @@ public class GameService {
      */
     public List<GameMove> getGameMoves(Long gameId) {
         return gameMoveRepository.findByGameIdOrderByMoveNumberAsc(gameId);
+    }
+    
+    /**
+     * 获取棋盘状态
+     */
+    public BoardState getBoardState(Long gameId) {
+        Game game = getGame(gameId);
+        Board board = activeBoardsCache.computeIfAbsent(gameId, id -> loadBoardFromDatabase(id));
+        List<GameMove> moves = getGameMoves(gameId);
+        
+        BoardState state = new BoardState();
+        state.setBoard(board.getBoard());
+        state.setMoveCount(board.getMoveCount());
+        state.setGameStatus(game.getStatus());
+        state.setWinnerId(game.getWinnerId());
+        state.setCurrentTurn(gameLogic.getNextTurn(board.getMoveCount()));
+        state.setMoves(moves);
+        
+        return state;
+    }
+    
+    /**
+     * 棋盘状态DTO
+     */
+    @lombok.Data
+    public static class BoardState {
+        private int[][] board;
+        private int moveCount;
+        private GameStatus gameStatus;
+        private Long winnerId;
+        private PieceColor currentTurn;
+        private List<GameMove> moves;
     }
     
     /**

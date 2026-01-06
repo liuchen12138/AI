@@ -119,6 +119,19 @@ public class GameController extends BaseController {
         }
     }
     
+    /**
+     * 获取棋盘状态
+     */
+    @GetMapping("/{gameId}/board")
+    public ResponseEntity<ApiResponse<GameService.BoardState>> getBoardState(@PathVariable Long gameId) {
+        try {
+            GameService.BoardState state = gameService.getBoardState(gameId);
+            return ResponseEntity.ok(ApiResponse.success(state));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
+        }
+    }
+    
     @Data
     public static class CreateGameRequest {
         private AIDifficulty difficulty;

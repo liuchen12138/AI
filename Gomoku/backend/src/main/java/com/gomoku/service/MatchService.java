@@ -25,6 +25,7 @@ public class MatchService {
     
     private static final String MATCH_QUEUE_PREFIX = "match:queue:level:";
     private static final String MATCHING_USER_PREFIX = "match:user:";
+    private static final String MATCH_RESULT_PREFIX = "match:result:";
     private static final long MATCH_TIMEOUT = 120; // 120秒匹配超时
     
     /**
@@ -83,8 +84,23 @@ public class MatchService {
      * 查询匹配状态
      */
     public MatchStatus getMatchStatus(Long userId) {
-        String matchingKey = MATCHING_USER_PREFIX + userId;
+        // 先检查是否有匹配结果
+        String resultKey = MATCH_RESULT_PREFIX + userId;
+        Object resultObj = redisTemplate.opsForValue().get(resultKey);
+        if (resultObj != null) {
+            Long gameId = null;
+            if (resultObj instanceof Long) {
+                gameId = (Long) resultObj;
+            } else if (resultObj instanceof Integer) {
+                gameId = ((Integer) resultObj).longValue();
+            } else if (resultObj instanceof String) {
+                gameId = Long.parseLong((String) resultObj);
+            }
+            redisTemplate.delete(resultKey); // 获取后删除
+            return new MatchStatus(false, true, gameId);
+        }
         
+        String matchingKey = MATCHING_USER_PREFIX + userId;
         if (Boolean.TRUE.equals(redisTemplate.hasKey(matchingKey))) {
             return new MatchStatus(true, false, null);
         }
@@ -162,6 +178,13 @@ public class MatchService {
         
         // 创建对局
         var game = gameService.createPVPGame(blackPlayerId, whitePlayerId);
+        
+        // 存储匹配结果，让另一个玩家能通过轮询获取
+        redisTemplate.opsForValue().set(
+            MATCH_RESULT_PREFIX + player2Id, 
+            game.getGameId(), 
+            30, TimeUnit.SECONDS
+        );
         
         log.info("匹配成功：玩家 {} vs 玩家 {}，对局ID：{}", player1Id, player2Id, game.getGameId());
         
