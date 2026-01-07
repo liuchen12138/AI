@@ -40,6 +40,7 @@ public class GameService {
     
     /**
      * 创建人机对战
+     * AI的playerId统一使用-1L表示
      */
     @Transactional
     public Game createPVEGame(Long playerId, AIDifficulty difficulty) {
@@ -51,10 +52,13 @@ public class GameService {
         // 玩家随机分配黑白
         boolean playerIsBlack = Math.random() < 0.5;
         
+        // AI的playerId统一使用-1L
+        final Long AI_PLAYER_ID = -1L;
+        
         Game game = Game.builder()
                 .gameMode(GameMode.PVE)
-                .blackPlayerId(playerIsBlack ? playerId : null)
-                .whitePlayerId(playerIsBlack ? null : playerId)
+                .blackPlayerId(playerIsBlack ? playerId : AI_PLAYER_ID)
+                .whitePlayerId(playerIsBlack ? AI_PLAYER_ID : playerId)
                 .aiDifficulty(difficulty)
                 .status(GameStatus.PLAYING)
                 .startedAt(LocalDateTime.now())
@@ -74,11 +78,11 @@ public class GameService {
             AIEngine.Position aiMove = aiEngine.calculateNextMove(board, difficulty, PieceColor.BLACK);
             if (aiMove != null) {
                 gameLogic.executeMove(board, aiMove.getX(), aiMove.getY(), PieceColor.BLACK);
-                // 保存AI落子记录（AI执黑时playerId设为-1表示AI）
+                // 保存AI落子记录
                 GameMove move = GameMove.builder()
                         .gameId(game.getGameId())
                         .moveNumber(board.getMoveCount())
-                        .playerId(-1L)  // AI的playerId设为-1
+                        .playerId(AI_PLAYER_ID)
                         .positionX(aiMove.getX())
                         .positionY(aiMove.getY())
                         .build();
@@ -189,8 +193,7 @@ public class GameService {
             GameLogic.GameResult result = gameLogic.executeMove(board, aiPosition.getX(), aiPosition.getY(), aiColor);
             
             // 保存AI落子记录
-            Long aiPlayerId = game.getBlackPlayerId() != null && !game.getBlackPlayerId().equals(humanPlayerId) 
-                    ? game.getBlackPlayerId() : game.getWhitePlayerId();
+            Long aiPlayerId = -1L;  // AI的playerId统一为-1L
             
             GameMove aiMove = GameMove.builder()
                     .gameId(game.getGameId())
@@ -235,7 +238,7 @@ public class GameService {
         
         gameRepository.save(game);
         
-        // 更新积分（人机对战不更新）
+        // 更新积分（仅双人对战且不包含AI）
         if (game.getGameMode() == GameMode.PVP && winnerId != null) {
             updateScoresAfterGame(game);
         }
@@ -272,7 +275,7 @@ public class GameService {
         
         gameRepository.save(game);
         
-        // 更新积分（仅双人对战）
+        // 更新积分（仅双人对战且不包含AI）
         if (game.getGameMode() == GameMode.PVP) {
             updateScoresAfterGame(game);
         }
@@ -284,6 +287,11 @@ public class GameService {
      * 更新对局后的积分
      */
     private void updateScoresAfterGame(Game game) {
+        // 只有双人对战才更新积分，人机对战不更新积分
+        if (game.getGameMode() != GameMode.PVP) {
+            return;  // 人机对战不更新积分
+        }
+        
         if (game.getWinnerId() == null) {
             // 平局
             scoreService.updateDrawScore(game.getBlackPlayerId(), game.getWhitePlayerId());
@@ -294,10 +302,13 @@ public class GameService {
                     ? game.getWhitePlayerId() 
                     : game.getBlackPlayerId();
             
-            int winnerLevel = userService.getUserById(winnerId).getLevel();
-            int loserLevel = userService.getUserById(loserId).getLevel();
-            
-            scoreService.updateGameScore(winnerId, loserId, winnerLevel, loserLevel);
+            // 确保不是AI玩家
+            if (winnerId != -1L && loserId != -1L) {
+                int winnerLevel = userService.getUserById(winnerId).getLevel();
+                int loserLevel = userService.getUserById(loserId).getLevel();
+                
+                scoreService.updateGameScore(winnerId, loserId, winnerLevel, loserLevel);
+            }
         }
     }
     
@@ -305,6 +316,11 @@ public class GameService {
      * 验证是否轮到该玩家
      */
     private boolean isPlayerTurn(Game game, Long playerId, PieceColor currentTurn) {
+        // AI玩家不会执行人类玩家的操作
+        if (playerId == -1L) {
+            return false;  // AI不会执行人类玩家的落子操作
+        }
+        
         if (currentTurn == PieceColor.BLACK) {
             return game.getBlackPlayerId() != null && game.getBlackPlayerId().equals(playerId);
         } else {
@@ -321,9 +337,15 @@ public class GameService {
         
         for (GameMove move : moves) {
             Game game = gameRepository.findById(gameId).orElseThrow();
-            PieceColor color = game.getBlackPlayerId().equals(move.getPlayerId()) 
-                    ? PieceColor.BLACK 
-                    : PieceColor.WHITE;
+            PieceColor color;
+            if (move.getPlayerId() == -1L) {
+                // AI玩家，根据当前棋盘状态判断颜色
+                color = game.getBlackPlayerId() == -1L ? PieceColor.BLACK : PieceColor.WHITE;
+            } else {
+                color = game.getBlackPlayerId().equals(move.getPlayerId()) 
+                        ? PieceColor.BLACK 
+                        : PieceColor.WHITE;
+            }
             board.placeStone(move.getPositionX(), move.getPositionY(), color);
         }
         

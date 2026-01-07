@@ -23,16 +23,16 @@
       <div class="board-container">
         <div class="board" @click="handleBoardClick">
           <!-- 棋盘线条 -->
-          <svg class="board-lines" viewBox="0 0 560 560">
+          <svg class="board-lines" viewBox="0 0 580 580">
             <!-- 横线 -->
             <line v-for="i in 15" :key="'h' + i" 
                   :x1="20" :y1="20 + (i-1) * 40" 
-                  :x2="540" :y2="20 + (i-1) * 40" 
+                  :x2="580" :y2="20 + (i-1) * 40" 
                   stroke="#8B4513" stroke-width="1"/>
             <!-- 竖线 -->
             <line v-for="i in 15" :key="'v' + i" 
                   :x1="20 + (i-1) * 40" :y1="20" 
-                  :x2="20 + (i-1) * 40" :y2="540" 
+                  :x2="20 + (i-1) * 40" :y2="580" 
                   stroke="#8B4513" stroke-width="1"/>
             <!-- 星位 -->
             <circle v-for="star in starPoints" :key="'star' + star.x + star.y" 
@@ -81,15 +81,13 @@
       </button>
     </div>
     
-    <!-- 游戏结束弹窗 -->
-    <div v-if="gameOver" class="game-over-overlay" @click="closeOverlay">
-      <div class="game-over-modal" @click.stop>
-        <h2>{{ gameResultText }}</h2>
-        <p>{{ gameResultDescription }}</p>
-        <div class="modal-buttons">
-          <button @click="playAgain" class="btn-primary">再来一局</button>
-          <button @click="goBack" class="btn-secondary">返回大厅</button>
-        </div>
+    <!-- 游戏结束提示，显示在棋盘上方 -->
+    <div v-if="gameOver" class="game-over-message">
+      <h2>{{ gameResultText }}</h2>
+      <p>{{ gameResultDescription }}</p>
+      <div class="modal-buttons">
+        <button @click="playAgain" class="btn-primary">再来一局</button>
+        <button @click="goBack" class="btn-secondary">返回大厅</button>
       </div>
     </div>
     
@@ -379,9 +377,7 @@ function playAgain() {
   }
 }
 
-function closeOverlay() {
-  // 点击遮罩不关闭
-}
+
 
 function handleMouseMove(event) {
   if (!canMove.value) {
@@ -539,8 +535,8 @@ onUnmounted(() => {
 }
 
 .board {
-  width: 560px;
-  height: 560px;
+  width: 580px;
+  height: 580px;
   background: #dcb35c;
   position: relative;
   cursor: pointer;
@@ -598,13 +594,50 @@ onUnmounted(() => {
 
 .last-move-marker {
   position: absolute;
-  width: 10px;
-  height: 10px;
-  background: red;
+  width: 34px;
+  height: 34px;
+  border: 2px solid #ff0000;
   border-radius: 50%;
   transform: translate(-50%, -50%);
-  z-index: 15;
-  animation: blink 1s infinite;
+  z-index: 20;
+  box-shadow: 0 0 10px rgba(255, 0, 0, 0.7);
+  animation: pulse 1s infinite;
+}
+
+.game-over-message {
+  position: absolute;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: white;
+  padding: 20px 40px;
+  border-radius: 15px;
+  box-shadow: 0 5px 25px rgba(0, 0, 0, 0.3);
+  z-index: 30;
+  text-align: center;
+  animation: slideDown 0.5s ease;
+}
+
+@keyframes slideDown {
+  from { top: -50px; opacity: 0; }
+  to { top: 20px; opacity: 1; }
+}
+
+.game-over-message h2 {
+  color: #667eea;
+  margin: 0 0 10px 0;
+  font-size: 28px;
+}
+
+.game-over-message p {
+  color: #666;
+  margin: 0 0 20px 0;
+}
+
+.game-over-message .modal-buttons {
+  display: flex;
+  gap: 15px;
+  justify-content: center;
 }
 
 @keyframes blink {
